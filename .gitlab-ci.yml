@@ -1,0 +1,49 @@
+variables:
+  SERVICE_NAME: "${CI_PROJECT_NAME}"
+  registry: "${registry_host}/${registry_ns}"
+  registry_image: "${registry}/${CI_PROJECT_NAME}"
+
+stages:
+  - build
+  - deploy
+
+before_script:
+  - cat deployment.yml
+  - sed -i "s|__SERVICE_NAME__|${SERVICE_NAME}|g" deployment.yml
+  - sed -i "s|__registry_image__|${registry_image}|g" deployment.yml
+  - sed -i "s|__CI_COMMIT_SHORT_SHA__|${CI_COMMIT_SHORT_SHA}|g" deployment.yml
+  - cat deployment.yml
+
+build-image:
+  stage: build
+  image: docker:19.03
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: "/certs"
+  services:
+    - docker:19.03-dind
+  script:
+    - echo ${DOCKER_HOST}
+    - docker login -u "${registry_user}" -p "${registry_password}" "${registry_host}"
+    - docker build -t "${registry_image}:latest" .
+    - docker tag "${registry_image}:latest" "${registry_image}:${CI_COMMIT_SHORT_SHA}"
+    - docker push "${registry_image}:latest"
+    - docker push "${registry_image}:${CI_COMMIT_SHORT_SHA}"
+
+deploy_k8s:
+  image: 
+    name: bitnami/kubectl:1.19
+    entrypoint: [""]
+  stage: deploy
+  before_script:
+    - sed -i "s|__SERVICE_NAME__|${SERVICE_NAME}|g" deployment.yml
+    - sed -i "s|__registry_image__|${registry_image}|g" deployment.yml
+    - sed -i "s|__CI_COMMIT_SHORT_SHA__|${CI_COMMIT_SHORT_SHA}|g" deployment.yml
+    - cat deployment.yml
+    - echo ${kube_config} | base64 -d > .kubeconfig
+    - export KUBECONFIG=$(pwd)/.kubeconfig
+    - kubectl get node
+  script:
+    - kubectl apply -f deployment.yml
+    - sleep 10 
+    - kubectl get pod,ing -n gitlab 

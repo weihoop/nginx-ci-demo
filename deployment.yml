@@ -1,0 +1,58 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-__SERVICE_NAME__
+  namespace: gitlab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-__SERVICE_NAME__
+  template:
+    metadata:
+      labels:
+        app: service-__SERVICE_NAME__
+    spec:
+      containers:
+      - env:
+        image: __registry_image__:__CI_COMMIT_SHORT_SHA__
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 24
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 10
+        name: service-__SERVICE_NAME__
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          failureThreshold: 6
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: service-__SERVICE_NAME__
+  name: service-__SERVICE_NAME__
+  namespace: gitlab
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: service-__SERVICE_NAME__
